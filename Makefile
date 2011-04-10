@@ -1,7 +1,7 @@
 LD_LIBRARY_PATH := $(LD_LIBRARY_PATH):./lib
 
-GOL_SRC_C = game_of_life.c
-GOL_SRC_H =
+GOL_SRC_C = gol_main.c gol_data.c
+GOL_SRC_H = gol_data.h
 GOL_SRC = $(GOL_SRC_C) $(GOL_SRC_H)
 
 gol-cpu-debug: $(GOL_SRC)
