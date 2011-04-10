@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <assert.h>
 
 #include "gol_data.h"
@@ -11,6 +12,9 @@ struct _gol_data
   int  data[];
 };
 
+#ifdef GPU
+extern "C" {
+#endif
 
 gol_data* 
 gol_data_from_l(
@@ -44,7 +48,7 @@ gol_data_from_l(
     }
   }
 
-  new_gol = malloc(sizeof(gol_data) + sizeof(int) * rows * cols);
+  new_gol = (gol_data*)malloc(sizeof(gol_data) + sizeof(int) * rows * cols);
 
   new_gol->rows = rows;
   new_gol->cols = cols;
@@ -83,6 +87,7 @@ gol_data_free(
   free(gol);
 }
 
+
 bool
 gol_data_is_valid(
   const gol_data* gol)
@@ -115,6 +120,7 @@ gol_data_is_valid(
 }
 
 
+#ifdef CPU
 gol_data*
 gol_data_evolve(
   gol_data* dst,
@@ -183,6 +189,88 @@ gol_data_neigh_count(
          (gol_data_get(gol,i,jm1) == ALIVE ? 1 : 0) +
          (gol_data_get(gol,im1,jm1) == ALIVE ? 1 : 0);
 }
+#endif
+
+#ifdef GPU
+
+__global__ void
+_gol_data_evolve(
+  int* dst_data,
+  const int* src_data,
+  int rows,
+  int cols)
+{
+  int  i = blockIdx.x * blockDim.x + threadIdx.x;
+  int  j = blockIdx.y * blockDim.y + threadIdx.y;
+
+  if (i < rows && j < cols) {
+    int  ip1 = (i != rows - 1) ? (i + 1) : 0;
+    int  im1 = (i != 0) ? (i - 1) : (rows - 1);
+    int  jp1 = (j != cols - 1) ? (j + 1) : 0;
+    int  jm1 = (j != 0) ? (j - 1) : (cols - 1);
+    int  count;
+
+    count = (src_data[im1 * cols + j] == ALIVE ? 1 : 0) +
+      (src_data[im1 * cols + jp1] == ALIVE ? 1 : 0) +
+      (src_data[i * cols + jp1] == ALIVE ? 1 : 0) +
+      (src_data[ip1 * cols + jp1] == ALIVE ? 1 : 0) +
+      (src_data[ip1 * cols + j] == ALIVE ? 1 : 0) +
+      (src_data[ip1 * cols + jm1] == ALIVE ? 1 : 0) + 
+      (src_data[i * cols + jm1] == ALIVE ? 1 : 0) +
+      (src_data[im1 * cols + jm1] == ALIVE ? 1 : 0);
+
+    if (src_data[i * cols + j] == ALIVE) {
+      if (count < 2) {
+	dst_data[i * cols + j] = DEAD;
+      } else if (count == 2 || count == 3) {
+	dst_data[i * cols + j] = ALIVE;
+      } else {
+	dst_data[i * cols + j] = DEAD;
+      }
+    } else {
+      if (count == 3) {
+	dst_data[i * cols + j] = ALIVE;
+      } else {
+	dst_data[i * cols + j] = DEAD;
+      }
+    }
+  }
+}
+
+gol_data*
+gol_data_evolve(
+  gol_data* dst,
+  const gol_data* src)
+{
+  assert(gol_data_is_valid(dst));
+  assert(gol_data_is_valid(src));
+  assert(dst->rows == src->rows);
+  assert(dst->cols == src->cols);
+
+  int*  dst_data;
+  int*  src_data;
+  int   block_dim_x = 16;
+  int   block_dim_y = 16;
+  int   grid_dim_x = (int)ceil((float)dst->rows / block_dim_x);
+  int   grid_dim_y = (int)ceil((float)dst->cols / block_dim_y);
+
+  cudaMalloc((void**)&dst_data,sizeof(int) * dst->rows * dst->cols);
+  cudaMalloc((void**)&src_data,sizeof(int) * src->rows * src->cols);
+
+  cudaMemcpy(dst_data,dst->data,sizeof(int) * dst->rows * dst->cols,cudaMemcpyHostToDevice);
+  cudaMemcpy(src_data,src->data,sizeof(int) * src->rows * src->cols,cudaMemcpyHostToDevice);
+
+  _gol_data_evolve <<<dim3(grid_dim_x,grid_dim_y),dim3(block_dim_x,block_dim_y)>>> (dst_data,src_data,dst->rows,dst->cols);
+  cudaThreadSynchronize();
+
+  cudaMemcpy(dst->data,dst_data,sizeof(int) * dst->rows * dst->cols,cudaMemcpyDeviceToHost);
+
+  cudaFree(dst_data);
+  cudaFree(src_data);
+
+  return dst;
+}
+#endif
 
 int
 gol_data_get_rows(
@@ -229,3 +317,7 @@ gol_data_set(
 
   gol->data[i * gol->cols + j] = cell_state;
 }
+
+#ifdef GPU
+}
+#endif
