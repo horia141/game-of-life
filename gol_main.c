@@ -78,8 +78,6 @@ gol_frame_cb()
     int        i;
     int        j;
 
-    fprintf(stderr,"Iteration #%d\n",state.curr_iteration + 1);
-    
     if (state.show_which == 0) {
       prev = state.gol_data0;
       curr = state.gol_data1;
@@ -114,6 +112,35 @@ gol_frame_cb()
   }
 }
 
+rectangle*
+gol_pos(void)
+{
+  static rectangle  r;
+
+  if (state.rows > state.cols) {
+    float  aspect_cols;
+
+    aspect_cols = (float)state.cols / (float)state.rows;
+
+    r.x = (1 - aspect_cols) / 2;
+    r.y = 0;
+    r.w = aspect_cols;
+    r.h = 1;
+  } else {
+    float  aspect_rows;
+    
+    aspect_rows = (float)state.rows / (float)state.cols;
+
+    r.x = 0;
+    r.y = (1 - aspect_rows) / 2;
+    r.w = 1;
+    r.h = aspect_rows;
+  }
+
+  return &r;
+}
+
+
 int
 main(
   int argc,
@@ -128,9 +155,9 @@ main(
     {0,0,0,0}
   };
 
-  int option_idx = 0;
-  int getopt_res = 0;
-  int scan_res;
+  int    option_idx = 0;
+  int    getopt_res = 0;
+  int    scan_res;
 
   config.max_iteration = 10;
   config.ms_per_frame = 100;
@@ -177,7 +204,7 @@ main(
   state.rows = gol_data_get_rows(state.gol_data0);
   state.cols = gol_data_get_cols(state.gol_data1);
   state.drv = driver_make(gol_frame_cb,config.ms_per_frame);
-  state.tq = driver_tquad_make_color(state.drv,&(rectangle){0,0,1,1},state.rows,state.cols,&(color){1,1,1,1});
+  state.tq = driver_tquad_make_color(state.drv,gol_pos(),state.rows,state.cols,&(color){1,1,1,1});
 
   driver_start(state.drv);
 
