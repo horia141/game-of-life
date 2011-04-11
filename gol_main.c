@@ -47,13 +47,15 @@ static char
 help_msg_options[] =
   "Options:\n"
   "  --max-iters=[number]     Number of iterations to perform.\n"
-  "  --ms-per-frame=[number]  Number of milliseconds to spend showing each generation.\n"
+  "  --iters-stride=[number]  Show every \"iters-stride\" iterations.\n"
+  "  --ms-per-iter=[number]   Number of milliseconds to spend showing each generation.\n"
   "  --life-path=[path]       File path to initial state file.\n"
   "  --exit-on-stop           The simulator exist when the last iteration is drawn.\n";
 
 static struct {
   int     max_iteration;
-  int     ms_per_frame;
+  int     iters_stride;
+  int     ms_per_iter;
   char*   life_path;
   bool    exit_on_stop;
 } config;
@@ -90,12 +92,17 @@ gol_frame_cb()
 
     gol_data_evolve(curr,prev);
 
-    for (i = 0; i < state.rows; i++) {
-      for (j = 0; j < state.cols; j++) {
-	if (gol_data_get(curr,i,j) == ALIVE) {
-	  tquad_texture_set(state.tq,i,j,&(color){0,0,0,1});
-	} else {
-	  tquad_texture_set(state.tq,i,j,&(color){1,1,1,1});
+    if ((state.curr_iteration % config.iters_stride == 0) ||
+	(state.curr_iteration == config.max_iteration - 1)) {
+      fprintf(stderr,"Iteration #%d\n",state.curr_iteration + 1);
+
+      for (i = 0; i < state.rows; i++) {
+	for (j = 0; j < state.cols; j++) {
+	  if (gol_data_get(curr,i,j) == ALIVE) {
+	    tquad_texture_set(state.tq,i,j,&(color){0,0,0,1});
+	  } else {
+	    tquad_texture_set(state.tq,i,j,&(color){1,1,1,1});
+	  }
 	}
       }
     }
@@ -148,10 +155,11 @@ main(
 {
   static struct option long_options[] = {
     {"max-iters",    required_argument, 0, 1},
-    {"ms-per-frame", required_argument, 0, 2},
-    {"life-path",    required_argument, 0, 3},
-    {"exit-on-stop", no_argument,       0, 4},
-    {"help",         no_argument,       0, 5},
+    {"iters-stride", required_argument, 0, 2},
+    {"ms-per-iter",  required_argument, 0, 3},
+    {"life-path",    required_argument, 0, 4},
+    {"exit-on-stop", no_argument,       0, 5},
+    {"help",         no_argument,       0, 6},
     {0,0,0,0}
   };
 
@@ -160,8 +168,9 @@ main(
   int    scan_res;
 
   config.max_iteration = 10;
-  config.ms_per_frame = 100;
-  config.life_path = "data/life01.l";
+  config.iters_stride = 1;
+  config.ms_per_iter = 100;
+  config.life_path = strdup("data/life01.l");
   config.exit_on_stop = false;
 
   while ((getopt_res = getopt_long(argc,argv,"",long_options,&option_idx)) != -1) {
@@ -175,20 +184,34 @@ main(
 
       break;
     case 2:
-      scan_res = sscanf(optarg,"%d",&config.ms_per_frame);
+      scan_res = sscanf(optarg,"%d",&config.iters_stride);
       if (scan_res != 1) {
-	fprintf(stderr,"Invalid argument for option \"ms-per-frame\": %s\n",optarg);
+	fprintf(stderr,"Invalid argument for option \"iters-stride\": %s\n",optarg);
+	exit(EXIT_FAILURE);
+      }
+
+      if (config.iters_stride < 1) {
+	fprintf(stderr,"Invalid argument for option \"iters-stride\": %s\n",optarg);
+	fprintf(stderr,"Must be strictly greater than 0.\n");
+	exit(EXIT_FAILURE);
+      }
+
+      break;
+    case 3:
+      scan_res = sscanf(optarg,"%d",&config.ms_per_iter);
+      if (scan_res != 1) {
+	fprintf(stderr,"Invalid argument for option \"ms-per-iter\": %s\n",optarg);
 	exit(EXIT_FAILURE);
       }	
 
       break;
-    case 3:
+    case 4:
       config.life_path = strdup(optarg);
       break;
-    case 4:
+    case 5:
       config.exit_on_stop = true;
       break;
-    case 5:
+    case 6:
       printf("%s\n",help_msg_header);
       printf("%s\n",help_msg_options);
       exit(EXIT_SUCCESS);
@@ -203,7 +226,7 @@ main(
   state.gol_data1 = gol_data_from_l(config.life_path);
   state.rows = gol_data_get_rows(state.gol_data0);
   state.cols = gol_data_get_cols(state.gol_data1);
-  state.drv = driver_make(gol_frame_cb,config.ms_per_frame);
+  state.drv = driver_make(gol_frame_cb,config.ms_per_iter);
   state.tq = driver_tquad_make_color(state.drv,gol_pos(),state.rows,state.cols,&(color){1,1,1,1});
 
   driver_start(state.drv);
