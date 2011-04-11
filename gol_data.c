@@ -180,14 +180,14 @@ gol_data_neigh_count(
   jp1 = (j != gol->cols - 1) ? (j + 1) : 0;
   jm1 = (j != 0) ? (j - 1) : (gol->cols - 1);
 
-  return (gol_data_get(gol,im1,j) == ALIVE ? 1 : 0) +
-         (gol_data_get(gol,im1,jp1) == ALIVE ? 1 : 0) +
-         (gol_data_get(gol,i,jp1) == ALIVE ? 1 : 0) +
-         (gol_data_get(gol,ip1,jp1) == ALIVE ? 1 : 0) +
-         (gol_data_get(gol,ip1,j) == ALIVE ? 1 : 0) +
-         (gol_data_get(gol,ip1,jm1) == ALIVE ? 1 : 0) +
-         (gol_data_get(gol,i,jm1) == ALIVE ? 1 : 0) +
-         (gol_data_get(gol,im1,jm1) == ALIVE ? 1 : 0);
+  return gol_data_get(gol,im1,j) + 
+         gol_data_get(gol,im1,jp1) +
+         gol_data_get(gol,i,jp1) +
+         gol_data_get(gol,ip1,jp1) +
+         gol_data_get(gol,ip1,j) +
+         gol_data_get(gol,ip1,jm1) +
+         gol_data_get(gol,i,jm1) +
+         gol_data_get(gol,im1,jm1);
 }
 #endif
 
@@ -210,14 +210,14 @@ _gol_data_evolve(
     int  jm1 = (j != 0) ? (j - 1) : (cols - 1);
     int  count;
 
-    count = (src_data[im1 * cols + j] == ALIVE ? 1 : 0) +
-      (src_data[im1 * cols + jp1] == ALIVE ? 1 : 0) +
-      (src_data[i * cols + jp1] == ALIVE ? 1 : 0) +
-      (src_data[ip1 * cols + jp1] == ALIVE ? 1 : 0) +
-      (src_data[ip1 * cols + j] == ALIVE ? 1 : 0) +
-      (src_data[ip1 * cols + jm1] == ALIVE ? 1 : 0) + 
-      (src_data[i * cols + jm1] == ALIVE ? 1 : 0) +
-      (src_data[im1 * cols + jm1] == ALIVE ? 1 : 0);
+    count = src_data[im1 * cols + j] +
+            src_data[im1 * cols + jp1] +
+            src_data[i * cols + jp1] +
+            src_data[ip1 * cols + jp1] +
+            src_data[ip1 * cols + j] +
+            src_data[ip1 * cols + jm1] +
+            src_data[i * cols + jm1] +
+            src_data[im1 * cols + jm1];
 
     if (src_data[i * cols + j] == ALIVE) {
       if (count < 2) {
