@@ -48,10 +48,10 @@ help_msg_options[] =
   "Options:\n"
   "  --console-only               Skip the visualisation part. Useful for benchmarks.\n"
   "  --max-iters=[number]         Number of iterations to perform.\n"
-  "  --iters-stride=ALL|[number]  Show every \"iters-stride\" iterations.\n"
+  "  --iters-stride=ALL|[number]  Show every \"iters-stride\" iterations (or just the last for ALL).\n"
   "  --ms-per-iter=[number]       Number of milliseconds to spend showing each generation.\n"
-  "  --life-path=[path]           File path to initial state file.\n"
-  "  --exit-on-stop               The simulator exist when the last iteration is drawn.\n"
+  "  --life-input=[path]          File path to initial state file.\n"
+  "  --life-output=[path]         File path for final state file.\n"
   "  --help                       Show this help message.";
 
 static struct {
@@ -59,8 +59,8 @@ static struct {
   int     max_iteration;
   int     iters_stride;
   int     ms_per_iter;
-  char*   life_path;
-  bool    exit_on_stop;
+  char*   life_input;
+  char*   life_output;
 } config;
 
 static struct {
@@ -114,15 +114,11 @@ gol_frame_cb()
 
     return 1;
   } else {
-    if (config.exit_on_stop) {
-      return 0;
-    } else {
-      return 1;
-    }
+    return 0;
   }
 }
 
-static int
+static void
 gol_console_run()
 {
   while (state.curr_iteration < config.max_iteration) {
@@ -148,8 +144,6 @@ gol_console_run()
 
     state.curr_iteration += 1;
   }
-
-  return 0;
 }
 
 static rectangle*
@@ -183,16 +177,16 @@ gol_pos(void)
 
 int
 main(
-  int argc,
-  char** argv)
+     int argc,
+     char** argv)
 {
   static struct option long_options[] = {
     {"console-only", no_argument,       0, 1},
     {"max-iters",    required_argument, 0, 2},
     {"iters-stride", required_argument, 0, 3},
     {"ms-per-iter",  required_argument, 0, 4},
-    {"life-path",    required_argument, 0, 5},
-    {"exit-on-stop", no_argument,       0, 6},
+    {"life-input",   required_argument, 0, 5},
+    {"life-output",  required_argument, 0, 6},
     {"help",         no_argument,       0, 7},
     {0,0,0,0}
   };
@@ -205,8 +199,8 @@ main(
   config.max_iteration = 10;
   config.iters_stride = 1;
   config.ms_per_iter = 100;
-  config.life_path = strdup("data/life01.l");
-  config.exit_on_stop = false;
+  config.life_input = strdup("data/life01.l");
+  config.life_output = NULL;
 
   while ((getopt_res = getopt_long(argc,argv,"",long_options,&option_idx)) != -1) {
     switch (getopt_res) {
@@ -249,10 +243,10 @@ main(
 
       break;
     case 5:
-      config.life_path = strdup(optarg);
+      config.life_input = strdup(optarg);
       break;
     case 6:
-      config.exit_on_stop = true;
+      config.life_output = strdup(optarg);
       break;
     case 7:
       printf("%s\n",help_msg_header);
@@ -265,19 +259,16 @@ main(
 
   /* A small integrity test. */
 
-  if (config.console_only && config.exit_on_stop) {
-    fprintf(stderr,"Invalid usage of option \"exit-on-stop\" with option \"console-only\"!\n");
-    exit(EXIT_FAILURE);
-  }
-
   if (config.iters_stride == -1) {
     config.iters_stride = config.max_iteration;
   }
 
+  /* GO GO GO!. */
+
   state.curr_iteration = 0;
   state.show_which = 0;
-  state.gol_data0 = gol_data_from_l(config.life_path);
-  state.gol_data1 = gol_data_from_l(config.life_path);
+  state.gol_data0 = gol_data_from_l(config.life_input);
+  state.gol_data1 = gol_data_from_l(config.life_input);
   state.rows = gol_data_get_rows(state.gol_data0);
   state.cols = gol_data_get_cols(state.gol_data1);
 
@@ -295,9 +286,18 @@ main(
     gol_console_run();
   }
 
+  if (config.life_output != NULL){
+    if (state.show_which == 0) {
+      gol_data_save_l(state.gol_data0,config.life_output);
+    } else {
+      gol_data_save_l(state.gol_data1,config.life_output);
+    }
+  }
+
   gol_data_free(state.gol_data0);
   gol_data_free(state.gol_data1);
-  free(config.life_path);
+  free(config.life_input);
+  free(config.life_output);
 
   return 0;
 }

@@ -318,6 +318,37 @@ gol_data_set(
   gol->data[i * gol->cols + j] = cell_state;
 }
 
+
+void
+gol_data_save_l(
+  const gol_data* gol,
+  const char* path)
+{
+  assert(gol_data_is_valid(gol));
+  assert(path != NULL);
+  assert(path[0] != '\0');
+
+  FILE*  l_file;
+  int    i;
+  int    j;
+
+  l_file = fopen(path,"wt");
+
+  for (i = 0; i < gol->rows; i++) {
+    for (j = 0; j < gol->cols; j++) {
+      if (gol_data_get(gol,i,j) == ALIVE) {
+	fprintf(l_file,"X");
+      } else {
+	fprintf(l_file,".");
+      }
+    }
+    
+    fprintf(l_file,"\n");
+  }
+
+  fclose(l_file);
+}
+
 #ifdef GPU
 }
 #endif

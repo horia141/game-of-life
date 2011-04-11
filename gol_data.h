@@ -23,6 +23,8 @@ int        gol_data_get_rows(const gol_data* gol);
 int        gol_data_get_cols(const gol_data* gol);
 int        gol_data_get(const gol_data* gol, int i, int j);
 void       gol_data_set(gol_data* gol, int i, int j, int cell_state);
+
+void       gol_data_save_l(const gol_data* gol, const char* path);
   
 #ifdef GPU
 }
