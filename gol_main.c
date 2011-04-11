@@ -46,13 +46,16 @@ help_msg_header[] =
 static char
 help_msg_options[] =
   "Options:\n"
-  "  --max-iters=[number]     Number of iterations to perform.\n"
-  "  --iters-stride=[number]  Show every \"iters-stride\" iterations.\n"
-  "  --ms-per-iter=[number]   Number of milliseconds to spend showing each generation.\n"
-  "  --life-path=[path]       File path to initial state file.\n"
-  "  --exit-on-stop           The simulator exist when the last iteration is drawn.\n";
+  "  --console-only               Skip the visualisation part. Useful for benchmarks.\n"
+  "  --max-iters=[number]         Number of iterations to perform.\n"
+  "  --iters-stride=ALL|[number]  Show every \"iters-stride\" iterations.\n"
+  "  --ms-per-iter=[number]       Number of milliseconds to spend showing each generation.\n"
+  "  --life-path=[path]           File path to initial state file.\n"
+  "  --exit-on-stop               The simulator exist when the last iteration is drawn.\n"
+  "  --help                       Show this help message.";
 
 static struct {
+  bool    console_only;
   int     max_iteration;
   int     iters_stride;
   int     ms_per_iter;
@@ -119,7 +122,37 @@ gol_frame_cb()
   }
 }
 
-rectangle*
+static int
+gol_console_run()
+{
+  while (state.curr_iteration < config.max_iteration) {
+    gol_data*  prev;
+    gol_data*  curr;
+
+    if (state.show_which == 0) {
+      prev = state.gol_data0;
+      curr = state.gol_data1;
+      state.show_which = 1;
+    } else {
+      prev = state.gol_data1;
+      curr = state.gol_data0;
+      state.show_which = 0;
+    }
+
+    gol_data_evolve(curr,prev);
+
+    if ((state.curr_iteration % config.iters_stride == 0) ||
+	(state.curr_iteration == config.max_iteration - 1)) {
+      fprintf(stderr,"Iteration #%d\n",state.curr_iteration + 1);
+    }
+
+    state.curr_iteration += 1;
+  }
+
+  return 0;
+}
+
+static rectangle*
 gol_pos(void)
 {
   static rectangle  r;
@@ -154,12 +187,13 @@ main(
   char** argv)
 {
   static struct option long_options[] = {
-    {"max-iters",    required_argument, 0, 1},
-    {"iters-stride", required_argument, 0, 2},
-    {"ms-per-iter",  required_argument, 0, 3},
-    {"life-path",    required_argument, 0, 4},
-    {"exit-on-stop", no_argument,       0, 5},
-    {"help",         no_argument,       0, 6},
+    {"console-only", no_argument,       0, 1},
+    {"max-iters",    required_argument, 0, 2},
+    {"iters-stride", required_argument, 0, 3},
+    {"ms-per-iter",  required_argument, 0, 4},
+    {"life-path",    required_argument, 0, 5},
+    {"exit-on-stop", no_argument,       0, 6},
+    {"help",         no_argument,       0, 7},
     {0,0,0,0}
   };
 
@@ -167,6 +201,7 @@ main(
   int    getopt_res = 0;
   int    scan_res;
 
+  config.console_only = false;
   config.max_iteration = 10;
   config.iters_stride = 1;
   config.ms_per_iter = 100;
@@ -176,6 +211,9 @@ main(
   while ((getopt_res = getopt_long(argc,argv,"",long_options,&option_idx)) != -1) {
     switch (getopt_res) {
     case 1:
+      config.console_only = true;
+      break;
+    case 2:
       scan_res = sscanf(optarg,"%d",&config.max_iteration);
       if (scan_res != 1) {
 	fprintf(stderr,"Invalid argument for option \"max-iters\": %s\n",optarg);
@@ -183,21 +221,26 @@ main(
       }
 
       break;
-    case 2:
-      scan_res = sscanf(optarg,"%d",&config.iters_stride);
-      if (scan_res != 1) {
-	fprintf(stderr,"Invalid argument for option \"iters-stride\": %s\n",optarg);
-	exit(EXIT_FAILURE);
-      }
+    case 3:
+      if (strcasecmp(optarg,"ALL") == 0) {
+	config.iters_stride = -1;
+      } else {
+	scan_res = sscanf(optarg,"%d",&config.iters_stride);
 
-      if (config.iters_stride < 1) {
-	fprintf(stderr,"Invalid argument for option \"iters-stride\": %s\n",optarg);
-	fprintf(stderr,"Must be strictly greater than 0.\n");
-	exit(EXIT_FAILURE);
+	if (scan_res != 1) {
+	  fprintf(stderr,"Invalid argument for option \"iters-stride\": %s\n",optarg);
+	  exit(EXIT_FAILURE);
+	}
+
+	if (config.iters_stride < 1) {
+	  fprintf(stderr,"Invalid argument for option \"iters-stride\": %s\n",optarg);
+	  fprintf(stderr,"Must be strictly greater than 0.\n");
+	  exit(EXIT_FAILURE);
+	}
       }
 
       break;
-    case 3:
+    case 4:
       scan_res = sscanf(optarg,"%d",&config.ms_per_iter);
       if (scan_res != 1) {
 	fprintf(stderr,"Invalid argument for option \"ms-per-iter\": %s\n",optarg);
@@ -205,13 +248,13 @@ main(
       }	
 
       break;
-    case 4:
+    case 5:
       config.life_path = strdup(optarg);
       break;
-    case 5:
+    case 6:
       config.exit_on_stop = true;
       break;
-    case 6:
+    case 7:
       printf("%s\n",help_msg_header);
       printf("%s\n",help_msg_options);
       exit(EXIT_SUCCESS);
@@ -220,18 +263,38 @@ main(
     }
   }
 
+  /* A small integrity test. */
+
+  if (config.console_only && config.exit_on_stop) {
+    fprintf(stderr,"Invalid usage of option \"exit-on-stop\" with option \"console-only\"!\n");
+    exit(EXIT_FAILURE);
+  }
+
+  if (config.iters_stride == -1) {
+    config.iters_stride = config.max_iteration;
+  }
+
   state.curr_iteration = 0;
   state.show_which = 0;
   state.gol_data0 = gol_data_from_l(config.life_path);
   state.gol_data1 = gol_data_from_l(config.life_path);
   state.rows = gol_data_get_rows(state.gol_data0);
   state.cols = gol_data_get_cols(state.gol_data1);
-  state.drv = driver_make(gol_frame_cb,config.ms_per_iter);
-  state.tq = driver_tquad_make_color(state.drv,gol_pos(),state.rows,state.cols,&(color){1,1,1,1});
 
-  driver_start(state.drv);
+  if (!config.console_only) {
+    state.drv = driver_make(gol_frame_cb,config.ms_per_iter);
+    state.tq = driver_tquad_make_color(state.drv,gol_pos(),state.rows,state.cols,&(color){1,1,1,1});
 
-  driver_free(state.drv);
+    driver_start(state.drv);
+
+    driver_free(state.drv);
+  } else {
+    state.drv = NULL;
+    state.tq = NULL;
+
+    gol_console_run();
+  }
+
   gol_data_free(state.gol_data0);
   gol_data_free(state.gol_data1);
   free(config.life_path);
