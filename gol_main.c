@@ -65,9 +65,7 @@ static struct {
 
 static struct {
   int        curr_iteration;
-  int        show_which;
-  gol_data*  gol_data0;
-  gol_data*  gol_data1;
+  gol_data*  data;
   int        rows;
   int        cols;
   driver*    drv;
@@ -78,39 +76,26 @@ static int
 gol_frame_cb()
 {
   if (state.curr_iteration < config.max_iteration) {
-    gol_data*  prev;
-    gol_data*  curr;
-    int        i;
-    int        j;
+    int  iters;
+    int  i;
+    int  j;
 
-    if (state.show_which == 0) {
-      prev = state.gol_data0;
-      curr = state.gol_data1;
-      state.show_which = 1;
-    } else {
-      prev = state.gol_data1;
-      curr = state.gol_data0;
-      state.show_which = 0;
-    }
+    fprintf(stderr,"Iteration #%d\n",state.curr_iteration + 1);
 
-    gol_data_evolve(curr,prev);
-
-    if ((state.curr_iteration % config.iters_stride == 0) ||
-	(state.curr_iteration == config.max_iteration - 1)) {
-      fprintf(stderr,"Iteration #%d\n",state.curr_iteration + 1);
-
-      for (i = 0; i < state.rows; i++) {
-	for (j = 0; j < state.cols; j++) {
-	  if (gol_data_get(curr,i,j) == ALIVE) {
-	    tquad_texture_set(state.tq,i,j,&(color){0,0,0,1});
-	  } else {
-	    tquad_texture_set(state.tq,i,j,&(color){1,1,1,1});
-	  }
+    for (i = 0; i < state.rows; i++) {
+      for (j = 0; j < state.cols; j++) {
+	if (gol_data_get(state.data,i,j) == ALIVE) {
+	  tquad_texture_set(state.tq,i,j,&(color){0,0,0,1});
+	} else {
+	  tquad_texture_set(state.tq,i,j,&(color){1,1,1,1});
 	}
       }
     }
 
-    state.curr_iteration += 1;
+    iters = max_n(min_n(config.iters_stride,config.max_iteration - state.curr_iteration - 1),1);
+    gol_data_evolve(state.data,iters);
+
+    state.curr_iteration += iters;
 
     return 1;
   } else {
@@ -121,28 +106,15 @@ gol_frame_cb()
 static void
 gol_console_run()
 {
+  int  iters;
+
   while (state.curr_iteration < config.max_iteration) {
-    gol_data*  prev;
-    gol_data*  curr;
+    fprintf(stderr,"Iteration #%d\n",state.curr_iteration + 1);
 
-    if (state.show_which == 0) {
-      prev = state.gol_data0;
-      curr = state.gol_data1;
-      state.show_which = 1;
-    } else {
-      prev = state.gol_data1;
-      curr = state.gol_data0;
-      state.show_which = 0;
-    }
+    iters = max_n(min_n(config.iters_stride,config.max_iteration - state.curr_iteration - 1),1);
+    gol_data_evolve(state.data,iters);
 
-    gol_data_evolve(curr,prev);
-
-    if ((state.curr_iteration % config.iters_stride == 0) ||
-	(state.curr_iteration == config.max_iteration - 1)) {
-      fprintf(stderr,"Iteration #%d\n",state.curr_iteration + 1);
-    }
-
-    state.curr_iteration += 1;
+    state.curr_iteration += iters;
   }
 }
 
@@ -266,11 +238,9 @@ main(
   /* GO GO GO!. */
 
   state.curr_iteration = 0;
-  state.show_which = 0;
-  state.gol_data0 = gol_data_from_l(config.life_input);
-  state.gol_data1 = gol_data_from_l(config.life_input);
-  state.rows = gol_data_get_rows(state.gol_data0);
-  state.cols = gol_data_get_cols(state.gol_data1);
+  state.data = gol_data_from_l(config.life_input);
+  state.rows = gol_data_get_rows(state.data);
+  state.cols = gol_data_get_cols(state.data);
 
   if (!config.console_only) {
     state.drv = driver_make(gol_frame_cb,config.ms_per_iter);
@@ -287,15 +257,10 @@ main(
   }
 
   if (config.life_output != NULL){
-    if (state.show_which == 0) {
-      gol_data_save_l(state.gol_data0,config.life_output);
-    } else {
-      gol_data_save_l(state.gol_data1,config.life_output);
-    }
+    gol_data_save_l(state.data,config.life_output);
   }
 
-  gol_data_free(state.gol_data0);
-  gol_data_free(state.gol_data1);
+  gol_data_free(state.data);
   free(config.life_input);
   free(config.life_output);
 

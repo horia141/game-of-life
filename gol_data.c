@@ -7,9 +7,11 @@
 
 struct _gol_data
 {
-  int  rows;
-  int  cols;
-  int  data[];
+  int   rows;
+  int   cols;
+  int*  data_curr;
+  int*  data_next;
+  int   data[];
 };
 
 #ifdef GPU
@@ -48,10 +50,12 @@ gol_data_from_l(
     }
   }
 
-  new_gol = (gol_data*)malloc(sizeof(gol_data) + sizeof(int) * rows * cols);
+  new_gol = (gol_data*)malloc(sizeof(gol_data) + sizeof(int) * 2 * rows * cols);
 
   new_gol->rows = rows;
   new_gol->cols = cols;
+  new_gol->data_curr = new_gol->data;
+  new_gol->data_next = new_gol->data + rows * cols;
 
   fseek(l_file,0,SEEK_SET);
 
@@ -60,9 +64,11 @@ gol_data_from_l(
   while ((c_char = fgetc(l_file)) != EOF) {
     if (c_char == '.') {
       new_gol->data[d_ptr] = DEAD;
+      new_gol->data[rows * cols + d_ptr] = DEAD;
       d_ptr += 1;
     } else if (c_char == 'X') {
       new_gol->data[d_ptr] = ALIVE;
+      new_gol->data[rows * cols + d_ptr] = ALIVE;
       d_ptr += 1;
     } else if (c_char == '\n') {
     } else {
@@ -83,6 +89,8 @@ gol_data_free(
 
   gol->rows = -1;
   gol->cols = -1;
+  gol->data_curr = NULL;
+  gol->data_next = NULL;
 
   free(gol);
 }
@@ -106,6 +114,13 @@ gol_data_is_valid(
   if (gol->cols < 1) {
     return false;
   }
+  
+  if (!((gol->data_curr == gol->data &&
+	 gol->data_next == gol->data + gol->rows * gol->cols) ||
+	(gol->data_curr == gol->data + gol->rows * gol->cols &&
+	 gol->data_next == gol->data))) {
+    return false;
+  }
 
   for (i = 0; i < gol->rows; i++) {
     for (j = 0; j < gol->cols; j++) {
@@ -123,41 +138,47 @@ gol_data_is_valid(
 #ifdef CPU
 gol_data*
 gol_data_evolve(
-  gol_data* dst,
-  const gol_data* src)
+  gol_data* gol,
+  int iters)
 {
-  assert(gol_data_is_valid(dst));
-  assert(gol_data_is_valid(src));
-  assert(dst->rows == src->rows);
-  assert(dst->cols == src->cols);
+  assert(gol_data_is_valid(gol));
+  assert(iters > 0);
 
-  int  count;
-  int  i;
-  int  j;
+  int*  temp;
+  int   count;
+  int   i;
+  int   j;
 
-  for (i = 0; i < dst->rows; i++) {
-    for (j = 0; j < dst->cols; j++) {
-      count = gol_data_neigh_count(src,i,j);
+  while (iters > 0) {
+    for (i = 0; i < gol->rows; i++) {
+      for (j = 0; j < gol->cols; j++) {
+	count = gol_data_neigh_count(gol,i,j);
 
-      if (gol_data_get(src,i,j) == ALIVE) {
-	if (count < 2) {
-	  gol_data_set(dst,i,j,DEAD);
-	} else if (count == 2 || count == 3) {
-	  gol_data_set(dst,i,j,ALIVE);
+	if (gol_data_get(gol,i,j) == ALIVE) {
+	  if (count < 2) {
+	    gol->data_next[i * gol->cols + j] = DEAD;
+	  } else if (count == 2 || count == 3) {
+	    gol->data_next[i * gol->cols + j] = ALIVE;
+	  } else {
+	    gol->data_next[i * gol->cols + j] = DEAD;
+	  }
 	} else {
-	  gol_data_set(dst,i,j,DEAD);
-	}
-      } else {
-	if (count == 3) {
-	  gol_data_set(dst,i,j,ALIVE);
-	} else {
-	  gol_data_set(dst,i,j,DEAD);
+	  if (count == 3) {
+	    gol->data_next[i * gol->cols + j] = ALIVE;
+	  } else {
+	    gol->data_next[i * gol->cols + j] = DEAD;
+	  }
 	}
       }
     }
+
+    temp = gol->data_curr;
+    gol->data_curr = gol->data_next;
+    gol->data_next = temp;
+    iters = iters - 1;
   }
 
-  return dst;
+  return gol;
 }
 
 int
@@ -300,7 +321,7 @@ gol_data_get(
   assert(i >= 0 && i < gol->rows);
   assert(j >= 0 && j < gol->cols);
 
-  return gol->data[i * gol->cols + j];
+  return gol->data_curr[i * gol->cols + j];
 }
 
 void
@@ -315,7 +336,7 @@ gol_data_set(
   assert(j >= 0 && j < gol->cols);
   assert(cell_state == ALIVE || cell_state == DEAD);
 
-  gol->data[i * gol->cols + j] = cell_state;
+  gol->data_curr[i * gol->cols + j] = cell_state;
 }
 
 
