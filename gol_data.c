@@ -213,11 +213,10 @@ gol_data_neigh_count(
 #endif
 
 #ifdef GPU
-
 __global__ void
 _gol_data_evolve(
-  int* dst_data,
-  const int* src_data,
+  int* curr,
+  int* next,
   int rows,
   int cols)
 {
@@ -225,34 +224,34 @@ _gol_data_evolve(
   int  j = blockIdx.y * blockDim.y + threadIdx.y;
 
   if (i < rows && j < cols) {
-    int  ip1 = (i != rows - 1) ? (i + 1) : 0;
-    int  im1 = (i != 0) ? (i - 1) : (rows - 1);
-    int  jp1 = (j != cols - 1) ? (j + 1) : 0;
-    int  jm1 = (j != 0) ? (j - 1) : (cols - 1);
-    int  count;
+    int   ip1 = (i != rows - 1) ? (i + 1) : 0;
+    int   im1 = (i != 0) ? (i - 1) : (rows - 1);
+    int   jp1 = (j != cols - 1) ? (j + 1) : 0;
+    int   jm1 = (j != 0) ? (j - 1) : (cols - 1);
+    int   count;
 
-    count = src_data[im1 * cols + j] +
-            src_data[im1 * cols + jp1] +
-            src_data[i * cols + jp1] +
-            src_data[ip1 * cols + jp1] +
-            src_data[ip1 * cols + j] +
-            src_data[ip1 * cols + jm1] +
-            src_data[i * cols + jm1] +
-            src_data[im1 * cols + jm1];
+    count = curr[im1 * cols + j] +
+            curr[im1 * cols + jp1] +
+            curr[i * cols + jp1] +
+            curr[ip1 * cols + jp1] +
+            curr[ip1 * cols + j] +
+            curr[ip1 * cols + jm1] +
+            curr[i * cols + jm1] +
+            curr[im1 * cols + jm1];
 
-    if (src_data[i * cols + j] == ALIVE) {
+    if (curr[i * cols + j] == ALIVE) {
       if (count < 2) {
-	dst_data[i * cols + j] = DEAD;
+	next[i * cols + j] = DEAD;
       } else if (count == 2 || count == 3) {
-	dst_data[i * cols + j] = ALIVE;
+	next[i * cols + j] = ALIVE;
       } else {
-	dst_data[i * cols + j] = DEAD;
+	next[i * cols + j] = DEAD;
       }
     } else {
       if (count == 3) {
-	dst_data[i * cols + j] = ALIVE;
+	next[i * cols + j] = ALIVE;
       } else {
-	dst_data[i * cols + j] = DEAD;
+	next[i * cols + j] = DEAD;
       }
     }
   }
@@ -260,36 +259,54 @@ _gol_data_evolve(
 
 gol_data*
 gol_data_evolve(
-  gol_data* dst,
-  const gol_data* src)
+  gol_data* gol,
+  int iters)
 {
-  assert(gol_data_is_valid(dst));
-  assert(gol_data_is_valid(src));
-  assert(dst->rows == src->rows);
-  assert(dst->cols == src->cols);
+  assert(gol_data_is_valid(gol));
+  assert(iters > 0);
 
-  int*  dst_data;
-  int*  src_data;
+  int*  gpu_data;
+  int*  gpu_curr;
+  int*  gpu_next;
+  int*  temp;
   int   block_dim_x = 16;
   int   block_dim_y = 16;
-  int   grid_dim_x = (int)ceil((float)dst->rows / block_dim_x);
-  int   grid_dim_y = (int)ceil((float)dst->cols / block_dim_y);
+  dim3  block = dim3(block_dim_x,block_dim_y);
+  int   grid_dim_x = (int)ceil((float)gol->rows / block_dim_x);
+  int   grid_dim_y = (int)ceil((float)gol->cols / block_dim_y);
+  dim3  grid = dim3(grid_dim_x,grid_dim_y);
+  int   linear_size = gol->rows * gol->cols;
+  int   i;
 
-  cudaMalloc((void**)&dst_data,sizeof(int) * dst->rows * dst->cols);
-  cudaMalloc((void**)&src_data,sizeof(int) * src->rows * src->cols);
+  cudaMalloc((void**)&gpu_data,2 * sizeof(int) * linear_size);
+  cudaMemcpy(gpu_data,gol->data_curr,sizeof(int) * linear_size,cudaMemcpyHostToDevice);
+  cudaMemcpy(gpu_data + linear_size,gol->data_next,sizeof(int) * linear_size,cudaMemcpyHostToDevice);
 
-  cudaMemcpy(dst_data,dst->data,sizeof(int) * dst->rows * dst->cols,cudaMemcpyHostToDevice);
-  cudaMemcpy(src_data,src->data,sizeof(int) * src->rows * src->cols,cudaMemcpyHostToDevice);
+  gpu_curr = gpu_data;
+  gpu_next = gpu_data + linear_size;
 
-  _gol_data_evolve <<<dim3(grid_dim_x,grid_dim_y),dim3(block_dim_x,block_dim_y)>>> (dst_data,src_data,dst->rows,dst->cols);
-  cudaThreadSynchronize();
+  for (i = 0; i < iters; i++) {
+    _gol_data_evolve <<<grid,block>>> (gpu_curr,gpu_next,gol->rows,gol->cols);
+    cudaThreadSynchronize();
 
-  cudaMemcpy(dst->data,dst_data,sizeof(int) * dst->rows * dst->cols,cudaMemcpyDeviceToHost);
+    temp = gpu_curr;
+    gpu_curr = gpu_next;
+    gpu_next = temp;
+  }
 
-  cudaFree(dst_data);
-  cudaFree(src_data);
+  cudaMemcpy(gol->data,gpu_data,2 * sizeof(int) * linear_size,cudaMemcpyDeviceToHost);
 
-  return dst;
+  cudaFree(gpu_data);
+
+  if (iters % 2 == 0) {
+    gol->data_curr = gol->data;
+    gol->data_next = gol->data + linear_size;
+  } else {
+    gol->data_curr = gol->data + linear_size;
+    gol->data_next = gol->data;
+  }
+
+  return gol;
 }
 #endif
 
