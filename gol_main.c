@@ -80,7 +80,7 @@ gol_frame_cb()
     int  i;
     int  j;
 
-    fprintf(stderr,"Iteration #%d\n",state.curr_iteration + 1);
+    driver_set_title(state.drv,"Iteration #%d\n",state.curr_iteration + 1);
 
     for (i = 0; i < state.rows; i++) {
       for (j = 0; j < state.cols; j++) {
@@ -243,7 +243,7 @@ main(
   state.cols = gol_data_get_cols(state.data);
 
   if (!config.console_only) {
-    state.drv = driver_make(gol_frame_cb,config.ms_per_iter);
+    state.drv = driver_make(gol_frame_cb,"Game of Life",&(rectangle){100,100,600,600},config.ms_per_iter);
     state.tq = driver_tquad_make_color(state.drv,gol_pos(),state.rows,state.cols,&(color){1,1,1,1});
 
     driver_start(state.drv);
