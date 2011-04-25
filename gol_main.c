@@ -3,10 +3,6 @@
 #include <getopt.h>
 #include <string.h>
 
-#include <GL/gl.h>
-#include <GL/glu.h>
-#include <GL/glut.h>
-
 #include "ext/snt/utils.h"
 #include "ext/snt/color.h"
 #include "ext/snt/rectangle.h"
