@@ -1,0 +1,23 @@
+int
+frame_cb(void)
+{
+  tquad_move_by(q1,0.1,0.1);
+
+  tquad_set_image(
+}
+
+int
+main()
+{
+  driver*  drv;
+
+  drv = driver_make(frame_cb,20);
+
+  tquad* q1 = driver_new_tquad_color((rectangle){0.2,0.3,0.25,0.35},(color){0,1,0,1});
+  tquad* q2 = driver_new_tquad_image((rectangle){0.2,0.3,0.25,0.35},image_from_ppm_t("some_image.ppm"));
+
+  driver_start(drv);
+  friver_free(drv);
+
+  return 0;
+}
